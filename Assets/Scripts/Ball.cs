@@ -8,10 +8,9 @@ public class Ball : MonoBehaviour
     private Rigidbody2D rb;
     private Vector2 moveDirection;
     private bool isInitialized = false;
-    private bool shouldMove = true;
     private Wind currentWindZone = null;
     private bool canBeAffectedByWind = false;
-    private Vector2 lastWindVelocity;
+    private bool isWindEffectEnabled = false;
 
     private void Awake()
     {
@@ -27,10 +26,10 @@ public class Ball : MonoBehaviour
         }
         
         moveDirection = direction.normalized;
-        rb.velocity = moveDirection * constantSpeed;
+        rb.linearVelocity = moveDirection * constantSpeed;
         isInitialized = true;
         canBeAffectedByWind = false;
-        shouldMove = true;
+        isWindEffectEnabled = false;
         
         StartCoroutine(EnableWindEffect());
         Destroy(gameObject, lifeTime);
@@ -39,33 +38,42 @@ public class Ball : MonoBehaviour
     private IEnumerator EnableWindEffect()
     {
         yield return new WaitForSeconds(1f);
-        canBeAffectedByWind = true;
+        isWindEffectEnabled = true;
     }
 
     private void FixedUpdate()
     {
-        if (!isInitialized || !shouldMove) return;
+        if (!isInitialized) return;
 
-        if (canBeAffectedByWind)
+        Vector2 finalVelocity = Vector2.zero;
+
+        if (canBeAffectedByWind && isWindEffectEnabled && currentWindZone != null)
         {
-            if (currentWindZone != null)
-            {
-                rb.velocity = currentWindZone.GetWindForce();
-            }
+            finalVelocity = currentWindZone.GetWindForce();
         }
-        else
+        else if (!canBeAffectedByWind)
         {
-            rb.velocity = moveDirection * constantSpeed;
+            finalVelocity = moveDirection * constantSpeed;
+        }
+        else if (canBeAffectedByWind && rb.linearVelocity.magnitude < 0.1f)
+        {
+            // Если шарик почти остановился, даём ему небольшой импульс вверх
+            finalVelocity = Vector2.up * constantSpeed * 0.5f;
+        }
+
+        if (finalVelocity != Vector2.zero)
+        {
+            rb.linearVelocity = finalVelocity;
         }
     }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
         Wind wind = other.GetComponent<Wind>();
-        if (wind != null && canBeAffectedByWind)
+        if (wind != null && canBeAffectedByWind && isWindEffectEnabled)
         {
             currentWindZone = wind;
-            rb.velocity = wind.GetWindForce();
+            rb.linearVelocity = wind.GetWindForce();
         }
     }
 
@@ -73,9 +81,11 @@ public class Ball : MonoBehaviour
     {
         if (other.GetComponent<Wind>() == currentWindZone)
         {
-            lastWindVelocity = currentWindZone.GetWindForce();
             currentWindZone = null;
-            rb.velocity = lastWindVelocity;
+            if (canBeAffectedByWind)
+            {
+                rb.linearVelocity = Vector2.up * constantSpeed * 0.5f;
+            }
         }
     }
 
@@ -89,13 +99,22 @@ public class Ball : MonoBehaviour
 
         if (collision.gameObject.CompareTag("Ground"))
         {
-            shouldMove = false;
-            rb.velocity = Vector2.zero;
+            canBeAffectedByWind = true;
+            moveDirection = Vector2.zero;
+            
+            if (isWindEffectEnabled && currentWindZone != null)
+            {
+                rb.linearVelocity = currentWindZone.GetWindForce();
+            }
+            else
+            {
+                rb.linearVelocity = Vector2.up * constantSpeed * 0.5f;
+            }
             return;
         }
 
         Vector2 normal = collision.contacts[0].normal;
         moveDirection = Vector2.Reflect(moveDirection, normal);
-        rb.velocity = moveDirection * constantSpeed;
+        rb.linearVelocity = moveDirection * constantSpeed;
     }
 } 
