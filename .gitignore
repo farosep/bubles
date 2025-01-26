@@ -1,0 +1,10 @@
+﻿UserSettings
+Temp
+ProjectSettings
+Packages
+Logs
+Library
+Assets/Adaptive Performance
+*.meta
+*.asset
+Assets/InputSystem_Actions.inputactions
