@@ -10,7 +10,6 @@ public class Ball : MonoBehaviour
     private bool isInitialized = false;
     private Wind currentWindZone = null;
     private bool canBeAffectedByWind = false;
-    private bool isWindEffectEnabled = false;
 
     private void Awake()
     {
@@ -29,7 +28,6 @@ public class Ball : MonoBehaviour
         rb.linearVelocity = moveDirection * constantSpeed;
         isInitialized = true;
         canBeAffectedByWind = false;
-        isWindEffectEnabled = false;
         
         StartCoroutine(EnableWindEffect());
         Destroy(gameObject, lifeTime);
@@ -38,54 +36,58 @@ public class Ball : MonoBehaviour
     private IEnumerator EnableWindEffect()
     {
         yield return new WaitForSeconds(1f);
-        isWindEffectEnabled = true;
+        canBeAffectedByWind = true;
+        CheckForWindZone();
+    }
+
+    private void CheckForWindZone()
+    {
+        if (!canBeAffectedByWind) return;
+
+        Collider2D[] colliders = Physics2D.OverlapCircleAll(transform.position, 0.1f);
+        foreach (Collider2D collider in colliders)
+        {
+            Wind wind = collider.GetComponent<Wind>();
+            if (wind != null && wind != currentWindZone)
+            {
+                currentWindZone = wind;
+                rb.linearVelocity = wind.GetWindForce();
+                return;
+            }
+        }
+        
+        // Если не нашли новую зону ветра
+        rb.linearVelocity = Vector2.up * constantSpeed * 0.5f;
     }
 
     private void FixedUpdate()
     {
         if (!isInitialized) return;
 
-        Vector2 finalVelocity = Vector2.zero;
-
-        if (canBeAffectedByWind && isWindEffectEnabled && currentWindZone != null)
+        if (!canBeAffectedByWind)
         {
-            finalVelocity = currentWindZone.GetWindForce();
-        }
-        else if (!canBeAffectedByWind)
-        {
-            finalVelocity = moveDirection * constantSpeed;
-        }
-        else if (canBeAffectedByWind && rb.linearVelocity.magnitude < 0.1f)
-        {
-            // Если шарик почти остановился, даём ему небольшой импульс вверх
-            finalVelocity = Vector2.up * constantSpeed * 0.5f;
+            rb.linearVelocity = moveDirection * constantSpeed;
+            return;
         }
 
-        if (finalVelocity != Vector2.zero)
+        if (currentWindZone != null)
         {
-            rb.linearVelocity = finalVelocity;
+            rb.linearVelocity = currentWindZone.GetWindForce();
         }
     }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        Wind wind = other.GetComponent<Wind>();
-        if (wind != null && canBeAffectedByWind && isWindEffectEnabled)
-        {
-            currentWindZone = wind;
-            rb.linearVelocity = wind.GetWindForce();
-        }
+        // Теперь просто игнорируем вход в новую зону ветра
     }
 
     private void OnTriggerExit2D(Collider2D other)
     {
-        if (other.GetComponent<Wind>() == currentWindZone)
+        Wind wind = other.GetComponent<Wind>();
+        if (wind != null && wind == currentWindZone)
         {
             currentWindZone = null;
-            if (canBeAffectedByWind)
-            {
-                rb.linearVelocity = Vector2.up * constantSpeed * 0.5f;
-            }
+            CheckForWindZone();
         }
     }
 
@@ -100,21 +102,15 @@ public class Ball : MonoBehaviour
         if (collision.gameObject.CompareTag("Ground"))
         {
             canBeAffectedByWind = true;
-            moveDirection = Vector2.zero;
-            
-            if (isWindEffectEnabled && currentWindZone != null)
-            {
-                rb.linearVelocity = currentWindZone.GetWindForce();
-            }
-            else
-            {
-                rb.linearVelocity = Vector2.up * constantSpeed * 0.5f;
-            }
+            CheckForWindZone();
             return;
         }
 
-        Vector2 normal = collision.contacts[0].normal;
-        moveDirection = Vector2.Reflect(moveDirection, normal);
-        rb.linearVelocity = moveDirection * constantSpeed;
+        if (!canBeAffectedByWind)
+        {
+            Vector2 normal = collision.contacts[0].normal;
+            moveDirection = Vector2.Reflect(moveDirection, normal);
+            rb.linearVelocity = moveDirection * constantSpeed;
+        }
     }
 } 
